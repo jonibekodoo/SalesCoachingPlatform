@@ -23,12 +23,16 @@ npm run dev                 # http://localhost:3003  (API /api → 4000 ga proxy
 
 Gemini kalitini admin panel → **Sozlamalar** boʻlimida kiriting (yoki `.env` dagi `GEMINI_API_KEY` zaxira sifatida ishlatiladi).
 
-### Production
+### Production (Docker)
 
 ```bash
-cd admin && npm run build          # admin/dist
-cd ../server && NODE_ENV=production npm start   # admin/dist ni ham shu port'dan beradi
+cp .env.example .env               # ADMIN_PASSWORD, JWT_SECRET, GEMINI_API_KEY
+docker compose up -d --build       # 127.0.0.1:4010 → admin panel + /api, baza ./data/
 ```
+
+Prod: `ai-coach.biznesim.uz` (server 31.40.29.195, `/opt/ai-coach`), nginx vhost `deploy/nginx-ai-coach.conf`, yangilash `deploy/deploy.sh` (git pull + build + up).
+
+Dockersiz: `cd admin && npm run build`, keyin `cd ../server && NODE_ENV=production npm start` (admin/dist ni ham shu port'dan beradi).
 
 Maʼlumotlar `server/data/platform.sqlite` (Node 24 ichki SQLite, qoʻshimcha oʻrnatish shart emas).
 

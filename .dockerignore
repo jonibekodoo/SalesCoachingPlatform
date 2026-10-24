@@ -1,0 +1,10 @@
+**/node_modules
+**/dist
+server/data
+server/.env
+.env
+data
+.git
+*.log
+deploy
+README.md

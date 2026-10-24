@@ -1,0 +1,17 @@
+services:
+  ai-coach:
+    build: .
+    image: ai-coach:latest
+    container_name: ai-coach
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      PORT: "4000"
+      DATA_DIR: /app/server/data
+      ADMIN_DIST: /app/admin/dist
+    ports:
+      - "127.0.0.1:4010:4000"
+    volumes:
+      # SQLite database and files survive rebuilds
+      - ./data:/app/server/data
