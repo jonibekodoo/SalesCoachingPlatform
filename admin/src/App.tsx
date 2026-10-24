@@ -43,13 +43,14 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    // A stale session of one area must not kick the user out of the other one
     const onLogout = () => {
       setUser(null);
-      navigate('/login');
+      if (!window.location.pathname.startsWith('/portal')) navigate('/login');
     };
     const onPortalLogout = () => {
       setCompany(null);
-      navigate('/portal/login');
+      if (window.location.pathname.startsWith('/portal')) navigate('/portal/login');
     };
     window.addEventListener('scp-logout', onLogout);
     window.addEventListener('scp-portal-logout', onPortalLogout);

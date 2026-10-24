@@ -277,7 +277,8 @@ export interface Report {
 }
 
 export interface Stats {
-  companies: { total: number; active: number };
+  companies: { total: number; active: number; pending: number };
+  lowBalance: { id: string; name: string; type: PlanType; remainingMinutes: number }[];
   allTime: { calls: number; minutes: number; cost: number };
   thisMonth: {
     calls: number;
@@ -287,11 +288,13 @@ export interface Stats {
     packagesSold: number;
     topups: number;
     avgScore: number | null;
+    avgRating: number | null;
+    avgScriptScore: number | null;
     failed: number;
     aiCostUsd: number;
     aiCostSom: number;
   };
-  daily: { day: string; calls: number; minutes: number; cost: number }[];
+  daily: { day: string; calls: number; minutes: number; cost: number; avgRating: number | null }[];
   topCompanies: { id: string; name: string; country: string; calls: number; minutes: number; cost: number }[];
   recent: AnalysisSummary[];
 }
