@@ -230,6 +230,10 @@ export async function analyzeForCompany(p) {
   parsed.fileName = fileName || 'sales_call.audio';
   normalizeTasks(parsed.coachingCard);
   normalizeTalkRatio(parsed.callSummary);
+  // The model occasionally echoes the 10-point rating scale into the 0-100 score
+  if (parsed.callSummary && Number(parsed.callSummary.overallScore) > 0 && Number(parsed.callSummary.overallScore) <= 10) {
+    parsed.callSummary.overallScore = Math.round(Number(parsed.callSummary.overallScore) * 10);
+  }
   const customValues = coerceFieldValues(fieldDefs, parsed.customFields);
   parsed.customFields = customValues;
   parsed.language = {

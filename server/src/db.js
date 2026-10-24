@@ -157,6 +157,15 @@ try {
   // column already exists
 }
 
+// One-time fix: analyses where the model returned overallScore on a 10-point scale
+try {
+  db.exec(`UPDATE analyses SET overall_score = overall_score * 10,
+             result = json_set(result, '$.callSummary.overallScore', round(overall_score * 10))
+           WHERE status = 'done' AND overall_score > 0 AND overall_score <= 10 AND rating_score IS NOT NULL`);
+} catch (e) {
+  console.warn('overall_score fix skipped:', e.message);
+}
+
 // Company portal login (email + scrypt password hash)
 for (const col of ["portal_email TEXT NOT NULL DEFAULT ''", "portal_password_hash TEXT NOT NULL DEFAULT ''"]) {
   try {

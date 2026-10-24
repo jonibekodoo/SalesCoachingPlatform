@@ -63,7 +63,8 @@ Requirements:
      * Without a script use these standard criteria: Greeting and rapport; Needs discovery (questions asked); Value presentation; Objection handling; Closing and next step; Communication (listening, tone, talk ratio).
    - score: overall 0-10 with one decimal, consistent with the criteria (mandatory criteria weigh double).
    - verdict: one sentence in the output language summarizing the rating (e.g. what mainly cost points).
-   - Scale meaning: 9-10 excellent, 7-8.9 good, 5-6.9 average, 3-4.9 weak, below 3 poor.`;
+   - Scale meaning: 9-10 excellent, 7-8.9 good, 5-6.9 average, 3-4.9 weak, below 3 poor.
+   - IMPORTANT: this 10-point scale applies ONLY to rating.*. callSummary.overallScore stays a 0-100 percentage (e.g. 62, never 6.2), and transcript engagementScore / timeline values stay 0-100.`;
 }
 
 
