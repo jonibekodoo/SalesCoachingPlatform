@@ -8,6 +8,7 @@ import { asyncHandler, HttpError } from '../../middleware/errors.js';
 import { analyzeForCompany, rowToApi } from '../../services/analysis.service.js';
 import { accountState } from '../../services/billing.service.js';
 import { normalizeFieldDefs } from '../../services/customFields.js';
+import { LANGUAGES, findCountry } from '../../util/countries.js';
 
 const router = Router();
 
@@ -63,6 +64,8 @@ router.post(
       context: { callDate: req.body?.callDate || req.body?.call_date, notes: req.body?.notes },
       // Per-call script overrides the company script; an explicit empty string disables it for this call
       script: req.body?.script ?? undefined,
+      // Result language for this call (e.g. "ru"); defaults to the company setting, then the country language
+      outputLanguage: req.body?.outputLanguage || req.body?.output_language || undefined,
       source: 'api',
     });
     res.status(201).json({ ...result, account: accountState(q.one('SELECT * FROM companies WHERE id = ?', req.company.id)) });
@@ -90,7 +93,13 @@ router.put('/script', (req, res) => {
 
 router.get('/account', (req, res) => {
   const company = q.one('SELECT * FROM companies WHERE id = ?', req.company.id);
-  res.json({ ...accountState(company), customFields: JSON.parse(company.custom_fields || '[]'), hasScript: !!(company.script && company.script.trim()) });
+  res.json({
+    ...accountState(company),
+    customFields: JSON.parse(company.custom_fields || '[]'),
+    hasScript: !!(company.script && company.script.trim()),
+    outputLanguage: company.output_language || findCountry(company.country)?.languageCode || 'uz',
+    languages: LANGUAGES.map((l) => ({ code: l.code, language: l.language })),
+  });
 });
 
 router.get('/analyses', (req, res) => {

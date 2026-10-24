@@ -49,6 +49,13 @@ Maʼlumotlar `server/data/platform.sqlite` (Node 24 ichki SQLite, qoʻshimcha o�
 - Soʻrovdagi `script` maydoni shu qoʻngʻiroq uchun ustun; boʻsh satr yuborilsa skriptsiz tahlil.
 - Admin kompaniya sahifasi → "Tahlillar" tabida audio yuklab tahlil qila oladi (`POST /api/admin/companies/:id/analyze`); hisob API soʻrovi kabi yechiladi, natijada `source: "admin"`.
 
+## Baho, tillar, kompaniya portali
+
+- **10 ballik baho** (`rating`): har tahlilda mezonlar boʻyicha (skript boʻlsa — skript bosqichlari, majburiylari 2x vazn; boʻlmasa 6 standart mezon), `score` 0–10, `label` excellent/good/average/weak/poor, `verdict`, `criteria[]`. Javobning yuqori darajasida qisqa `rating`, `result.rating` da toʻliq.
+- **Natija tili**: davlat = audio tili; `outputLanguage` (kompaniya sozlamasi yoki soʻrovda) = tahlil matnlari tili (`uz`, `uz-Cyrl`, `ru`, `en`, …).
+- **Kompaniya portali** `/portal/login`: admin kompaniyaga portal email (kompaniya formasi) va parol (API tokenlar tabidagi "Kompaniya portali" kartasi) beradi. Kompaniya oʻz balansi/tarifini, tahlillarini (HTML/JSON yuklab olish), toʻlovlarini koʻradi, audio yuklab tahlil qiladi, skript va natija tilini oʻzgartiradi, parolini almashtiradi. Backend: `/api/portal/*` (JWT role=company, 7 kun).
+- API hujjati: admin paneldagi "API hujjatlari" sahifasi va `docs/API.md` (`/docs/API.md` manzilida ham beriladi).
+
 ## Billing qoidasi
 
 - Davomiylik fayl sarlavhasidan aniqlanadi (`music-metadata`); har boshlangan daqiqa toʻliq daqiqa.

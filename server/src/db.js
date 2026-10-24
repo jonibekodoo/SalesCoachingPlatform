@@ -143,6 +143,29 @@ for (const row of db.prepare("SELECT id, company_id, note, created_at FROM ledge
   db.prepare('UPDATE ledger SET paid = ?, subscription_id = COALESCE(subscription_id, ?) WHERE id = ?').run(paid, sub?.id ?? null, row.id);
 }
 
+// Output language per company ('' = same as the country language)
+try {
+  db.exec("ALTER TABLE companies ADD COLUMN output_language TEXT NOT NULL DEFAULT ''");
+} catch {
+  // column already exists
+}
+
+// 10-point rating per analysis
+try {
+  db.exec('ALTER TABLE analyses ADD COLUMN rating_score REAL');
+} catch {
+  // column already exists
+}
+
+// Company portal login (email + scrypt password hash)
+for (const col of ["portal_email TEXT NOT NULL DEFAULT ''", "portal_password_hash TEXT NOT NULL DEFAULT ''"]) {
+  try {
+    db.exec(`ALTER TABLE companies ADD COLUMN ${col}`);
+  } catch {
+    // column already exists
+  }
+}
+
 // Sales script per company and the adherence score per analysis
 for (const [table, col] of [['companies', "script TEXT NOT NULL DEFAULT ''"], ['analyses', 'script_score REAL']]) {
   try {

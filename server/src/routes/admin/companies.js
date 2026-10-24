@@ -4,8 +4,9 @@ import { newId, nowIso, newApiToken, hashToken, tokenPrefix } from '../../util/i
 import { HttpError } from '../../middleware/errors.js';
 import { accountState, subscribe, topUp, subscriptionView, activateSubscription, paymentView } from '../../services/billing.service.js';
 import { normalizeFieldDefs } from '../../services/customFields.js';
-import { isValidCountry, findCountry } from '../../util/countries.js';
+import { isValidCountry, findCountry, isValidLanguage, findLanguage } from '../../util/countries.js';
 import { rowToApi, analyzeForCompany } from '../../services/analysis.service.js';
+import { hashPassword } from '../../util/password.js';
 import multer from 'multer';
 import { config } from '../../config.js';
 import { asyncHandler } from '../../middleware/errors.js';
@@ -32,11 +33,15 @@ export const companyView = (c) => {
     country: c.country,
     countryName: country?.name || c.country,
     language: country?.language || '',
+    outputLanguage: c.output_language || '',
+    outputLanguageName: c.output_language ? findLanguage(c.output_language)?.language || c.output_language : country?.language || '',
     status: c.status,
     notes: c.notes,
     customFields: JSON.parse(c.custom_fields || '[]'),
     script: c.script || '',
     hasScript: !!(c.script && c.script.trim()),
+    portalEmail: c.portal_email || '',
+    portalEnabled: !!c.portal_password_hash,
     createdAt: c.created_at,
     updatedAt: c.updated_at,
   };
@@ -56,6 +61,13 @@ const parseCompany = (body, existing = {}) => {
   if (!name) throw new HttpError(400, 'Kompaniya nomi kerak');
   const country = String(body.country ?? existing.country ?? 'UZ').toUpperCase();
   if (!isValidCountry(country)) throw new HttpError(400, `Davlat kodi qoʻllanmaydi: ${country}`);
+  const portalEmail = String(body.portalEmail ?? existing.portal_email ?? '').trim().toLowerCase().slice(0, 200);
+  if (portalEmail) {
+    const clash = q.one('SELECT id FROM companies WHERE lower(portal_email) = ? AND id != ?', portalEmail, existing.id || '');
+    if (clash) throw new HttpError(400, 'Bu portal email boshqa kompaniyada ishlatilgan');
+  }
+  const outputLanguage = String(body.outputLanguage ?? existing.output_language ?? '').trim();
+  if (outputLanguage && !isValidLanguage(outputLanguage)) throw new HttpError(400, `Natija tili qoʻllanmaydi: ${outputLanguage}`);
   const status = body.status ?? existing.status ?? 'active';
   if (!['active', 'suspended', 'pending'].includes(status)) throw new HttpError(400, 'status: active, suspended yoki pending');
   const customFields = body.customFields === undefined ? JSON.parse(existing.custom_fields || '[]') : normalizeFieldDefs(body.customFields);
@@ -68,6 +80,8 @@ const parseCompany = (body, existing = {}) => {
     status,
     notes: String(body.notes ?? existing.notes ?? '').slice(0, 2000),
     script: String(body.script ?? existing.script ?? '').slice(0, 20000),
+    output_language: outputLanguage,
+    portal_email: portalEmail,
     custom_fields: JSON.stringify(customFields),
   };
 };
@@ -106,8 +120,8 @@ router.post('/', (req, res) => {
   const id = newId('co');
   const now = nowIso();
   q.run(
-    'INSERT INTO companies(id, name, contact_name, email, phone, country, status, notes, custom_fields, script, created_at, updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)',
-    id, c.name, c.contact_name, c.email, c.phone, c.country, c.status, c.notes, c.custom_fields, c.script, now, now
+    'INSERT INTO companies(id, name, contact_name, email, phone, country, status, notes, custom_fields, script, output_language, portal_email, created_at, updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
+    id, c.name, c.contact_name, c.email, c.phone, c.country, c.status, c.notes, c.custom_fields, c.script, c.output_language, c.portal_email, now, now
   );
   const company = getCompany(id);
   const sub = subscribe(company, plan, { activate: false });
@@ -135,8 +149,8 @@ router.patch('/:id', (req, res) => {
   const existing = getCompany(req.params.id);
   const c = parseCompany(req.body || {}, existing);
   q.run(
-    'UPDATE companies SET name=?, contact_name=?, email=?, phone=?, country=?, status=?, notes=?, custom_fields=?, script=?, updated_at=? WHERE id=?',
-    c.name, c.contact_name, c.email, c.phone, c.country, c.status, c.notes, c.custom_fields, c.script, nowIso(), existing.id
+    'UPDATE companies SET name=?, contact_name=?, email=?, phone=?, country=?, status=?, notes=?, custom_fields=?, script=?, output_language=?, portal_email=?, updated_at=? WHERE id=?',
+    c.name, c.contact_name, c.email, c.phone, c.country, c.status, c.notes, c.custom_fields, c.script, c.output_language, c.portal_email, nowIso(), existing.id
   );
   res.json(companyView(getCompany(existing.id)));
 });
@@ -144,6 +158,24 @@ router.patch('/:id', (req, res) => {
 router.delete('/:id', (req, res) => {
   const existing = getCompany(req.params.id);
   q.run('DELETE FROM companies WHERE id = ?', existing.id);
+  res.json({ ok: true });
+});
+
+// ---- Company portal access ----------------------------------------------------
+
+// Set (or reset) the portal password; email comes from the company form (portalEmail)
+router.post('/:id/portal-password', (req, res) => {
+  const c = getCompany(req.params.id);
+  const password = String(req.body?.password || '');
+  if (password.length < 8) throw new HttpError(400, 'Parol kamida 8 belgi boʻlsin');
+  if (!c.portal_email) throw new HttpError(400, 'Avval kompaniyaga portal email kiriting');
+  q.run('UPDATE companies SET portal_password_hash = ?, updated_at = ? WHERE id = ?', hashPassword(password), nowIso(), c.id);
+  res.json({ ok: true, portalEmail: c.portal_email });
+});
+
+router.delete('/:id/portal-password', (req, res) => {
+  const c = getCompany(req.params.id);
+  q.run("UPDATE companies SET portal_password_hash = '', updated_at = ? WHERE id = ?", nowIso(), c.id);
   res.json({ ok: true });
 });
 
@@ -279,6 +311,7 @@ router.post(
       customFields: req.body?.customFields,
       context: { callDate: req.body?.callDate, notes: req.body?.notes },
       script: req.body?.script?.trim() ? req.body.script : useScript ? undefined : '',
+      outputLanguage: req.body?.outputLanguage || undefined,
       source: 'admin',
     });
     res.status(201).json({ ...result, account: accountState(getCompany(c.id)) });

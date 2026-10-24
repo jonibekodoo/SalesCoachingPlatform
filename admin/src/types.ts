@@ -60,13 +60,39 @@ export interface Company {
   country: string;
   countryName: string;
   language: string;
+  outputLanguage: string;
+  outputLanguageName: string;
   status: 'pending' | 'active' | 'suspended';
   notes: string;
   customFields: FieldDef[];
   script: string;
   hasScript: boolean;
+  portalEmail: string;
+  portalEnabled: boolean;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface PortalMe {
+  company: Company;
+  account: Account;
+  tokens: number;
+  languages: Language[];
+}
+
+export interface PortalAccount {
+  account: Account;
+  subscriptions: Subscription[];
+  totals: { calls: number; minutes: number; cost: number; avgScore: number | null; avgScriptScore: number | null; avgRating: number | null };
+  monthly: { month: string; calls: number; minutes: number; cost: number; avgScore: number | null }[];
+  daily: { day: string; calls: number; minutes: number; cost: number }[];
+}
+
+export interface PortalPayments {
+  payments: LedgerEntry[];
+  totals: PaymentTotals;
+  charges: { id: string; amount: number; note: string; analysisId: string | null; createdAt: string }[];
+  balance: number;
 }
 
 export interface CompanyListItem extends Company {
@@ -132,6 +158,7 @@ export interface AnalysisSummary {
   processingMs: number;
   ai: { inputTokens: number; outputTokens: number; thoughtTokens: number; costUsd: number };
   scriptScore: number | null;
+  rating: RatingSummary | null;
   error: string | null;
   companyId?: string;
   companyName?: string;
@@ -164,6 +191,18 @@ export interface CoachingTask {
   status: string;
 }
 
+export interface RatingSummary {
+  scale: 10;
+  score: number;
+  basis: 'script' | 'general';
+  label: 'excellent' | 'good' | 'average' | 'weak' | 'poor';
+}
+
+export interface Rating extends RatingSummary {
+  verdict: string;
+  criteria: { name: string; score: number; required: boolean; comment: string }[];
+}
+
 export interface ScriptStep {
   id: string;
   step: string;
@@ -186,9 +225,10 @@ export interface ScriptAdherence {
 export interface AnalysisResult {
   fileName: string;
   source?: 'api' | 'admin';
-  language?: { country: string; language: string; code: string };
+  language?: { country: string; language: string; code: string; outputLanguage?: string; outputCode?: string };
   customFields?: Record<string, unknown>;
   scriptAdherence?: ScriptAdherence;
+  rating?: Rating;
   callSummary: {
     title: string;
     duration: string;
@@ -275,7 +315,15 @@ export interface Country {
   note?: string;
 }
 
+export interface Language {
+  code: string;
+  language: string;
+  name: string;
+  note?: string;
+}
+
 export interface Meta {
   countries: Country[];
+  languages: Language[];
   fieldTypes: FieldType[];
 }

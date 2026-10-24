@@ -14,10 +14,12 @@ COPY server/package.json server/package-lock.json ./
 RUN npm ci --omit=dev --no-audit --no-fund
 COPY server/ ./
 COPY --from=admin /app/admin/dist /app/admin/dist
+COPY docs/ /app/docs/
 
 ENV PORT=4000 \
     DATA_DIR=/app/server/data \
-    ADMIN_DIST=/app/admin/dist
+    ADMIN_DIST=/app/admin/dist \
+    DOCS_DIR=/app/docs
 RUN mkdir -p /app/server/data
 EXPOSE 4000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s CMD wget -qO- http://127.0.0.1:4000/api/health || exit 1

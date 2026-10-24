@@ -239,6 +239,21 @@ export const ScoreRing: React.FC<{ score: number | null; size?: number; dark?: b
   );
 };
 
+export const RATING_LABEL: Record<string, string> = { excellent: 'Aʼlo', good: 'Yaxshi', average: 'Oʻrtacha', weak: 'Zaif', poor: 'Yomon' };
+export const ratingTone = (score: number): Tone => (score >= 9 ? 'green' : score >= 7 ? 'sky' : score >= 5 ? 'amber' : 'red');
+export const ratingColor = (score: number) => (score >= 9 ? '#10b981' : score >= 7 ? '#0ea5e9' : score >= 5 ? '#f59e0b' : '#f43f5e');
+
+/** 10-point rating pill: "7.5 / 10 · Yaxshi" */
+export const RatingBadge: React.FC<{ rating: { score: number; label: string; basis?: string } | null | undefined; compact?: boolean }> = ({ rating, compact }) =>
+  rating ? (
+    <Badge tone={ratingTone(rating.score)} title={rating.basis === 'script' ? 'Skript boʻyicha baholangan' : 'Umumiy mezonlar boʻyicha'}>
+      {rating.score.toFixed(1)}
+      {compact ? '' : ' / 10'} · {RATING_LABEL[rating.label] || rating.label}
+    </Badge>
+  ) : (
+    <span className="text-slate-300">—</span>
+  );
+
 export const STATUS_TONE: Record<string, Tone> = { pending: 'amber', active: 'green', suspended: 'red', exhausted: 'amber', expired: 'slate', cancelled: 'slate', done: 'green', failed: 'red' };
 export const STATUS_LABEL: Record<string, string> = {
   pending: 'Toʻlov kutilmoqda',

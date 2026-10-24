@@ -9,6 +9,7 @@ export default defineConfig({
     strictPort: true,
     proxy: {
       '/api': { target: 'http://localhost:4000', changeOrigin: true },
+      '/docs/API.md': { target: 'http://localhost:4000', changeOrigin: true },
     },
   },
 });

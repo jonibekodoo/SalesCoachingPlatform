@@ -2,12 +2,13 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Plus, Search, Globe } from 'lucide-react';
 import { api } from '../api';
-import type { Company, CompanyListItem, Country, Plan } from '../types';
+import type { Company, CompanyListItem, Country, Language, Plan } from '../types';
 import { Badge, Button, Card, Empty, ErrorBox, Field, Input, Modal, PageHeader, Select, Spinner, StatusBadge, Table, Td, Textarea, fmtDate, fmtMinutes, fmtMoney, fmtNum } from '../components/ui';
 
 export default function Companies() {
   const [items, setItems] = useState<CompanyListItem[] | null>(null);
   const [countries, setCountries] = useState<Country[]>([]);
+  const [languages, setLanguages] = useState<Language[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [creating, setCreating] = useState(false);
@@ -16,7 +17,13 @@ export default function Companies() {
   const load = () => api.companies().then(setItems).catch((e) => setError(e.message));
   useEffect(() => {
     load();
-    api.meta().then((m) => setCountries(m.countries)).catch(() => {});
+    api
+      .meta()
+      .then((m) => {
+        setCountries(m.countries);
+        setLanguages(m.languages || []);
+      })
+      .catch(() => {});
   }, []);
 
   const filtered = useMemo(() => {
@@ -70,7 +77,10 @@ export default function Companies() {
                     <Globe className="w-3.5 h-3.5 text-slate-400" />
                     {c.countryName}
                   </div>
-                  <div className="text-[11px] text-slate-500">{c.language}</div>
+                  <div className="text-[11px] text-slate-500">
+                    {c.language}
+                    {c.outputLanguage && c.outputLanguageName !== c.language && <span> → {c.outputLanguageName}</span>}
+                  </div>
                 </Td>
                 <Td>
                   {c.account.subscription ? (
@@ -107,7 +117,7 @@ export default function Companies() {
         )}
       </Card>
 
-      <CompanyForm open={creating} onClose={() => setCreating(false)} countries={countries} onSaved={(id) => navigate(`/companies/${id}`)} />
+      <CompanyForm open={creating} onClose={() => setCreating(false)} countries={countries} languages={languages} onSaved={(id) => navigate(`/companies/${id}`)} />
     </>
   );
 }
@@ -116,10 +126,11 @@ export const CompanyForm: React.FC<{
   open: boolean;
   onClose: () => void;
   countries: Country[];
+  languages?: Language[];
   initial?: Partial<Company>;
   onSaved: (id: string) => void;
-}> = ({ open, onClose, countries, initial, onSaved }) => {
-  const [form, setForm] = useState({ name: '', country: 'UZ', contactName: '', email: '', phone: '', notes: '', status: 'active' as Company['status'], planId: '' });
+}> = ({ open, onClose, countries, languages = [], initial, onSaved }) => {
+  const [form, setForm] = useState({ name: '', country: 'UZ', outputLanguage: '', contactName: '', email: '', phone: '', notes: '', status: 'active' as Company['status'], planId: '', portalEmail: '' });
   const [plans, setPlans] = useState<Plan[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -129,12 +140,14 @@ export const CompanyForm: React.FC<{
       setForm({
         name: initial?.name || '',
         country: initial?.country || 'UZ',
+        outputLanguage: initial?.outputLanguage || '',
         contactName: initial?.contactName || '',
         email: initial?.email || '',
         phone: initial?.phone || '',
         notes: initial?.notes || '',
         status: initial?.status || 'active',
         planId: '',
+        portalEmail: initial?.portalEmail || '',
       });
       setError(null);
       if (!initial?.id) api.plans().then((p) => setPlans(p.filter((x) => x.isActive))).catch(() => {});
@@ -170,15 +183,27 @@ export const CompanyForm: React.FC<{
         <Field label="Nomi *">
           <Input value={form.name} onChange={set('name')} required autoFocus placeholder="Masalan: Ahlan House MChJ" />
         </Field>
-        <Field label="Davlat (audio va natija tili)" hint={country ? `Qoʻngʻiroqlar va tahlil natijasi: ${country.language}` : undefined}>
-          <Select value={form.country} onChange={set('country')}>
-            {countries.map((c) => (
-              <option key={c.code} value={c.code}>
-                {c.name} — {c.language}
-              </option>
-            ))}
-          </Select>
-        </Field>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Davlat (audio tili)" hint={country ? `Qoʻngʻiroqlar: ${country.language}` : undefined}>
+            <Select value={form.country} onChange={set('country')}>
+              {countries.map((c) => (
+                <option key={c.code} value={c.code}>
+                  {c.name} — {c.language}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="Natija tili" hint="Tahlil matnlari qaysi tilda yozilsin">
+            <Select value={form.outputLanguage} onChange={set('outputLanguage')}>
+              <option value="">Davlat tili bilan bir xil{country ? ` (${country.language})` : ''}</option>
+              {languages.map((l) => (
+                <option key={l.code} value={l.code}>
+                  {l.name}
+                </option>
+              ))}
+            </Select>
+          </Field>
+        </div>
         <div className="grid grid-cols-2 gap-3">
           <Field label="Kontakt shaxs">
             <Input value={form.contactName} onChange={set('contactName')} />
@@ -187,9 +212,14 @@ export const CompanyForm: React.FC<{
             <Input value={form.phone} onChange={set('phone')} placeholder="+998" />
           </Field>
         </div>
-        <Field label="Email">
-          <Input type="email" value={form.email} onChange={set('email')} />
-        </Field>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Email (aloqa)">
+            <Input type="email" value={form.email} onChange={set('email')} />
+          </Field>
+          <Field label="Portal login (email)" hint="Kompaniya portalga shu email bilan kiradi">
+            <Input type="email" value={form.portalEmail} onChange={set('portalEmail')} placeholder="manager@firma.uz" />
+          </Field>
+        </div>
         {!initial?.id && (
           <Field
             label="Tarif / paket *"

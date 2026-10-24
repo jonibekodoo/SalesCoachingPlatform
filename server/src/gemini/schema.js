@@ -196,9 +196,33 @@ const scriptAdherenceSchema = {
   required: ['score', 'summary', 'steps', 'deviations', 'recommendations'],
 };
 
+// 10-point rating with explicit criteria (script steps when a script is given)
+const ratingSchema = {
+  type: Type.OBJECT,
+  properties: {
+    score: { type: Type.NUMBER },
+    verdict: { type: Type.STRING },
+    criteria: {
+      type: Type.ARRAY,
+      minItems: 3,
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          name: { type: Type.STRING },
+          score: { type: Type.NUMBER },
+          required: { type: Type.BOOLEAN },
+          comment: { type: Type.STRING },
+        },
+        required: ['name', 'score', 'comment'],
+      },
+    },
+  },
+  required: ['score', 'verdict', 'criteria'],
+};
+
 export function buildAnalysisSchema(customFields = [], { withScript = false } = {}) {
-  const properties = { ...baseProperties };
-  const required = ['callSummary', 'transcript', 'sentimentTimeline', 'coachingCard'];
+  const properties = { ...baseProperties, rating: ratingSchema };
+  const required = ['callSummary', 'transcript', 'sentimentTimeline', 'coachingCard', 'rating'];
   if (withScript) {
     properties.scriptAdherence = scriptAdherenceSchema;
     required.push('scriptAdherence');

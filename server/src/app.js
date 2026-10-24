@@ -13,6 +13,7 @@ import settingsRouter from './routes/admin/settings.js';
 import statsRouter from './routes/admin/stats.js';
 import paymentsRouter from './routes/admin/payments.js';
 import v1Router from './routes/v1/index.js';
+import portalRouter from './routes/portal.js';
 
 export function createApp() {
   const app = express();
@@ -27,6 +28,9 @@ export function createApp() {
   // CRM integration API (token auth)
   app.use('/api/v1', v1Router);
 
+  // Company self-service portal (JWT auth, role company)
+  app.use('/api/portal', portalRouter);
+
   // Admin panel API (JWT auth)
   app.use('/api/admin/auth', authRouter);
   app.use('/api/admin/companies', adminAuth, companiesRouter);
@@ -37,6 +41,13 @@ export function createApp() {
   app.use('/api/admin/payments', adminAuth, paymentsRouter);
 
   app.use('/api', (_req, res) => res.status(404).json({ error: 'Not found' }));
+
+  // Shareable markdown API reference (repo docs/API.md)
+  const docsDir = process.env.DOCS_DIR || path.resolve(process.cwd(), '../docs');
+  app.get('/docs/API.md', (_req, res) => {
+    res.type('text/markdown; charset=utf-8');
+    res.sendFile(path.join(docsDir, 'API.md'), (err) => err && res.status(404).type('text/plain').send('API.md not found'));
+  });
 
   // Built admin panel (admin/dist) in production
   const dist = process.env.ADMIN_DIST || path.resolve(process.cwd(), '../admin/dist');

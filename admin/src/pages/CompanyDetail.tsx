@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Pencil, Trash2, KeyRound, Plus, Copy, Check, Ban, Wallet, Package, Clock, Globe, ListChecks, BarChart3, Braces, Save, X, BadgeCheck, FileText, UploadCloud, Loader2 } from 'lucide-react';
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { api } from '../api';
-import type { Account, CompanyDetail, Country, FieldDef, FieldType, Plan, Report, AnalysisSummary, Subscription } from '../types';
+import type { Account, CompanyDetail, Country, FieldDef, FieldType, Plan, Report, AnalysisSummary, Subscription, Language } from '../types';
 import { Badge, Button, Card, Empty, ErrorBox, Field, Input, Modal, PageHeader, Select, Spinner, Stat, StatusBadge, Table, Td, Textarea, cx, fmtDate, fmtMinutes, fmtMoney, fmtNum } from '../components/ui';
 import { CompanyForm } from './Companies';
 import { AnalysisTable } from './Analyses';
@@ -25,12 +25,19 @@ export default function CompanyDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>('overview');
   const [countries, setCountries] = useState<Country[]>([]);
+  const [languages, setLanguages] = useState<Language[]>([]);
   const [editing, setEditing] = useState(false);
 
   const load = useCallback(() => api.company(id).then(setC).catch((e) => setError(e.message)), [id]);
   useEffect(() => {
     load();
-    api.meta().then((m) => setCountries(m.countries)).catch(() => {});
+    api
+      .meta()
+      .then((m) => {
+        setCountries(m.countries);
+        setLanguages(m.languages || []);
+      })
+      .catch(() => {});
   }, [load]);
 
   const remove = async () => {
@@ -58,6 +65,7 @@ export default function CompanyDetailPage() {
             <StatusBadge status={c.status} />
             <Badge tone="indigo">
               <Globe className="w-3 h-3" /> {c.countryName} · {c.language}
+              {c.outputLanguage && c.outputLanguageName !== c.language && <span className="opacity-80"> → natija: {c.outputLanguageName}</span>}
             </Badge>
             {c.contactName && <span>{c.contactName}</span>}
             {c.phone && <span>· {c.phone}</span>}
@@ -133,9 +141,9 @@ export default function CompanyDetailPage() {
       {tab === 'tokens' && <TokensTab c={c} onChange={load} />}
       {tab === 'fields' && <FieldsTab c={c} onChange={load} />}
       {tab === 'script' && <ScriptTab c={c} onChange={load} />}
-      {tab === 'analyses' && <AnalysesTab c={c} onChange={load} />}
+      {tab === 'analyses' && <AnalysesTab c={c} onChange={load} languages={languages} />}
 
-      <CompanyForm open={editing} onClose={() => setEditing(false)} countries={countries} initial={c} onSaved={() => load()} />
+      <CompanyForm open={editing} onClose={() => setEditing(false)} countries={countries} languages={languages} initial={c} onSaved={() => load()} />
     </>
   );
 }
@@ -585,6 +593,8 @@ const TokensTab: React.FC<{ c: CompanyDetail; onChange: () => Promise<void> | vo
         )}
       </Card>
 
+      <PortalAccessCard c={c} onChange={onChange} />
+
       <Modal open={!!created} onClose={() => setCreated(null)} title="Token yaratildi — hozir nusxalab oling">
         <p className="text-sm text-slate-600 mb-3">Bu token boshqa koʻrsatilmaydi. Uni CRM sozlamalariga joylashtiring.</p>
         <div className="flex items-center gap-2">
@@ -599,6 +609,86 @@ const TokensTab: React.FC<{ c: CompanyDetail; onChange: () => Promise<void> | vo
         </div>
       </Modal>
     </div>
+  );
+};
+
+// Company portal login: email is edited in the company form, the password is set here
+const PortalAccessCard: React.FC<{ c: CompanyDetail; onChange: () => Promise<void> | void }> = ({ c, onChange }) => {
+  const [password, setPassword] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const portalUrl = `${window.location.origin}/portal/login`;
+
+  const gen = () => setPassword(Math.random().toString(36).slice(2, 8) + Math.random().toString(36).slice(2, 8).toUpperCase());
+
+  const save = async () => {
+    setBusy(true);
+    setError(null);
+    setDone(null);
+    try {
+      await api.setPortalPassword(c.id, password);
+      setDone(password);
+      setPassword('');
+      await onChange();
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const disable = async () => {
+    if (!confirm('Portal kirishini oʻchirasizmi? Kompaniya portalga kira olmaydi.')) return;
+    await api.disablePortal(c.id);
+    await onChange();
+  };
+
+  return (
+    <Card title="Kompaniya portali" className="lg:col-span-3">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
+        <div className="text-xs text-slate-600 space-y-1.5">
+          <p>
+            Kompaniya oʻz balansi, tahlillari, toʻlovlari va skriptini koʻradigan, audio yuklaydigan portal:{' '}
+            <a href={portalUrl} target="_blank" rel="noreferrer" className="font-mono text-indigo-700 underline">
+              {portalUrl}
+            </a>
+          </p>
+          <p>
+            Login email: {c.portalEmail ? <code className="font-mono">{c.portalEmail}</code> : <span className="text-amber-700 font-semibold">kiritilmagan — «Tahrirlash» orqali qoʻshing</span>}
+          </p>
+          <p>
+            Holat: {c.portalEnabled ? <Badge tone="green">Faol</Badge> : <Badge tone="slate">Parol oʻrnatilmagan</Badge>}
+            {c.portalEnabled && (
+              <button onClick={disable} className="ml-2 text-rose-700 hover:underline cursor-pointer">
+                oʻchirish
+              </button>
+            )}
+          </p>
+        </div>
+        <div className="md:col-span-2">
+          <Field label={c.portalEnabled ? 'Yangi parol (almashtirish)' : 'Parol oʻrnatish'} hint="Kamida 8 belgi. Parolni kompaniyaga xavfsiz kanal orqali yuboring.">
+            <div className="flex gap-2">
+              <Input value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" className="font-mono" />
+              <Button variant="secondary" type="button" onClick={gen}>
+                Generatsiya
+              </Button>
+              <Button type="button" loading={busy} disabled={!c.portalEmail || password.length < 8} onClick={save} icon={<KeyRound className="w-4 h-4" />}>
+                Saqlash
+              </Button>
+            </div>
+          </Field>
+          {done && (
+            <div className="mt-2 text-xs text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
+              Parol oʻrnatildi: <code className="font-mono font-bold">{done}</code> — login <code className="font-mono">{c.portalEmail}</code>
+            </div>
+          )}
+          <div className="mt-2">
+            <ErrorBox error={error} />
+          </div>
+        </div>
+      </div>
+    </Card>
   );
 };
 
@@ -803,7 +893,7 @@ const ScriptTab: React.FC<{ c: CompanyDetail; onChange: () => Promise<void> | vo
   );
 };
 
-const AnalysesTab: React.FC<{ c: CompanyDetail; onChange: () => Promise<void> | void }> = ({ c, onChange }) => {
+const AnalysesTab: React.FC<{ c: CompanyDetail; onChange: () => Promise<void> | void; languages: Language[] }> = ({ c, onChange, languages }) => {
   const navigate = useNavigate();
   const [items, setItems] = useState<AnalysisSummary[] | null>(null);
   const [total, setTotal] = useState(0);
@@ -811,6 +901,7 @@ const AnalysesTab: React.FC<{ c: CompanyDetail; onChange: () => Promise<void> | 
   const [externalId, setExternalId] = useState('');
   const [callDate, setCallDate] = useState('');
   const [notes, setNotes] = useState('');
+  const [outputLanguage, setOutputLanguage] = useState('');
   const [useScript, setUseScript] = useState(true);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -836,6 +927,7 @@ const AnalysesTab: React.FC<{ c: CompanyDetail; onChange: () => Promise<void> | 
       if (externalId) fd.append('externalId', externalId);
       if (callDate) fd.append('callDate', callDate);
       if (notes) fd.append('notes', notes);
+      if (outputLanguage) fd.append('outputLanguage', outputLanguage);
       fd.append('useScript', useScript ? 'true' : 'false');
       const r = await api.adminAnalyze(c.id, fd);
       await onChange();
@@ -872,8 +964,18 @@ const AnalysesTab: React.FC<{ c: CompanyDetail; onChange: () => Promise<void> | 
           <Field label="Qoʻngʻiroq sanasi" className="md:col-span-2">
             <Input type="date" value={callDate} onChange={(e) => setCallDate(e.target.value)} />
           </Field>
-          <Field label="Kontekst / izoh" className="md:col-span-4">
+          <Field label="Kontekst / izoh" className="md:col-span-2">
             <Input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Mahsulot, oldingi bosqich…" />
+          </Field>
+          <Field label="Natija tili" className="md:col-span-2">
+            <Select value={outputLanguage} onChange={(e) => setOutputLanguage(e.target.value)}>
+              <option value="">Standart ({c.outputLanguageName || c.language})</option>
+              {languages.map((l) => (
+                <option key={l.code} value={l.code}>
+                  {l.name}
+                </option>
+              ))}
+            </Select>
           </Field>
           <div className="md:col-span-8 flex flex-wrap items-center gap-4 text-xs text-slate-600">
             <label className={cx('inline-flex items-center gap-2', !c.hasScript && 'opacity-50')}>

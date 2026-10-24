@@ -10,6 +10,9 @@ import type {
   Meta,
   PaymentTotals,
   Plan,
+  PortalAccount,
+  PortalMe,
+  PortalPayments,
   Report,
   Settings,
   Stats,
@@ -17,27 +20,29 @@ import type {
   Account,
 } from './types';
 
-const TOKEN_KEY = 'scp_admin_token';
-
-export const auth = {
+const makeStore = (key: string) => ({
   get: () => {
     try {
-      return localStorage.getItem(TOKEN_KEY);
+      return localStorage.getItem(key);
     } catch {
       return null;
     }
   },
   set: (t: string) => {
     try {
-      localStorage.setItem(TOKEN_KEY, t);
+      localStorage.setItem(key, t);
     } catch {}
   },
   clear: () => {
     try {
-      localStorage.removeItem(TOKEN_KEY);
+      localStorage.removeItem(key);
     } catch {}
   },
-};
+});
+
+export const auth = makeStore('scp_admin_token');
+// Company portal keeps its own session, independent of the admin one
+export const portalAuth = makeStore('scp_portal_token');
 
 export class ApiError extends Error {
   status: number;
@@ -51,13 +56,19 @@ export class ApiError extends Error {
 
 async function request<T>(url: string, init: RequestInit = {}): Promise<T> {
   const headers: Record<string, string> = { ...(init.headers as Record<string, string>) };
-  const token = auth.get();
+  const isPortal = url.startsWith('/api/portal');
+  const token = isPortal ? portalAuth.get() : auth.get();
   if (token) headers.Authorization = `Bearer ${token}`;
   if (init.body && !(init.body instanceof FormData)) headers['Content-Type'] = 'application/json';
   const res = await fetch(url, { ...init, headers });
   if (res.status === 401 && !url.endsWith('/auth/login')) {
-    auth.clear();
-    window.dispatchEvent(new Event('scp-logout'));
+    if (isPortal) {
+      portalAuth.clear();
+      window.dispatchEvent(new Event('scp-portal-logout'));
+    } else {
+      auth.clear();
+      window.dispatchEvent(new Event('scp-logout'));
+    }
   }
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
@@ -149,4 +160,30 @@ export const api = {
   },
   analysis: (id: string) => request<AnalysisFull>(`/api/admin/analyses/${id}`),
   deleteAnalysis: (id: string) => request<{ ok: boolean }>(`/api/admin/analyses/${id}`, { method: 'DELETE' }),
+
+  setPortalPassword: (companyId: string, password: string) =>
+    request<{ ok: boolean; portalEmail: string }>(`/api/admin/companies/${companyId}/portal-password`, { method: 'POST', body: json({ password }) }),
+  disablePortal: (companyId: string) => request<{ ok: boolean }>(`/api/admin/companies/${companyId}/portal-password`, { method: 'DELETE' }),
+};
+
+// ---- Company self-service portal --------------------------------------------
+export const portal = {
+  login: (email: string, password: string) =>
+    request<{ token: string; company: Company }>('/api/portal/auth/login', { method: 'POST', body: json({ email, password }) }),
+  me: () => request<PortalMe>('/api/portal/me'),
+  changePassword: (currentPassword: string, newPassword: string) =>
+    request<{ ok: boolean }>('/api/portal/auth/password', { method: 'POST', body: json({ currentPassword, newPassword }) }),
+  account: () => request<PortalAccount>('/api/portal/account'),
+  payments: () => request<PortalPayments>('/api/portal/payments'),
+  analyses: (params: { q?: string; limit?: number; offset?: number } = {}) => {
+    const p = new URLSearchParams();
+    Object.entries(params).forEach(([k, v]) => v !== undefined && v !== '' && p.set(k, String(v)));
+    return request<{ total: number; items: AnalysisSummary[] }>(`/api/portal/analyses?${p}`);
+  },
+  analysis: (id: string) => request<AnalysisFull>(`/api/portal/analyses/${id}`),
+  analyze: (form: FormData) => request<AnalysisFull & { account: Account }>('/api/portal/analyze', { method: 'POST', body: form }),
+  script: () => request<{ script: string }>('/api/portal/script'),
+  saveScript: (script: string) => request<{ ok: boolean }>('/api/portal/script', { method: 'PUT', body: json({ script }) }),
+  saveSettings: (body: { outputLanguage: string }) => request<{ ok: boolean; company: Company }>('/api/portal/settings', { method: 'PUT', body: json(body) }),
+  tokens: () => request<ApiToken[]>('/api/portal/tokens'),
 };

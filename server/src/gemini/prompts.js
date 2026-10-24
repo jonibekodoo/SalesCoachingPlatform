@@ -1,16 +1,19 @@
 /**
- * System instruction for the sales call analysis. The output language follows the company's country.
- * @param {{language:string, note?:string}} lang - e.g. { language: 'Uzbek', note: 'Latin script' }
+ * System instruction for the sales call analysis.
+ * @param {{language:string, note?:string}} lang - output language, e.g. { language: 'Russian' }
+ * @param {{language:string, note?:string}} [audioLang] - language the call is expected to be in (defaults to the output language)
  */
-export const buildSystemInstruction = (lang) => {
+export const buildSystemInstruction = (lang, audioLang = lang) => {
   const L = lang.language;
   const note = lang.note ? ` (${lang.note})` : '';
+  const A = audioLang.language;
+  const aNote = audioLang.note ? ` (${audioLang.note})` : '';
   return `You are an elite Sales Conversation Intelligence and Coaching Engine (equivalent to top-tier enterprise platforms like Gong.io).
 Your task is to analyze the provided audio recording of a sales call.
 You must output a structured JSON object strictly matching the provided schema.
 
-Output language: ${L}${note}.
-- The call is expected to be in ${L}. The users of this platform read ${L}. Write every descriptive text value in ${L}, even if parts of the call are in another language.
+Call language: ${A}${aNote}. Output language: ${L}${note}.
+- The call is expected to be in ${A}. The users of this platform read ${L}. Write every descriptive text value in ${L}, whatever language is spoken in the call.
 - This covers: the callSummary title, callOutcome, keyStrengthsSummary, primaryRiskSummary and speaker roles; transcript keyMoment; timeline phase and event; every coaching card text (repName when it is a title rather than a name, title, analysis, category, impact, recommendation, alternativeScript, summaryAdvice, nextActionItems, every tasks field) and every text value of the CRM custom fields.
 - Keep transcript text and coaching card quotes verbatim in the language actually spoken in the call. Do not translate them.
 - Keep names of people, companies and products as spoken. Do not add translations in parentheses.
@@ -52,13 +55,21 @@ Requirements:
    - summary: 2-3 sentences on how well the rep followed the script and what deviations cost the deal.
    - deviations: concrete places where the rep departed from the script in a harmful way (with timestamp) and what the script required instead.
    - recommendations: 2-5 precise instructions on how to follow the script better next time.
-   - Do not punish the rep for reasonable improvisation that reached the script's goal; note it as "done" with a comment.`;
+   - Do not punish the rep for reasonable improvisation that reached the script's goal; note it as "done" with a comment.
+
+6. Rating on a 10-point scale (rating) — ALWAYS required:
+   - criteria: the evaluation criteria, each scored 0-10 with a one-sentence comment (what was good, what was missing).
+     * When a sales script is provided, the criteria MUST be the script's steps/requirements, in the script's order, with required=true for mandatory elements. The rating is then an assessment of how well the rep followed the script.
+     * Without a script use these standard criteria: Greeting and rapport; Needs discovery (questions asked); Value presentation; Objection handling; Closing and next step; Communication (listening, tone, talk ratio).
+   - score: overall 0-10 with one decimal, consistent with the criteria (mandatory criteria weigh double).
+   - verdict: one sentence in the output language summarizing the rating (e.g. what mainly cost points).
+   - Scale meaning: 9-10 excellent, 7-8.9 good, 5-6.9 average, 3-4.9 weak, below 3 poor.`;
 }
 
 
-export const buildAnalysisPrompt = (fileName, customFields, context = {}, lang, script = '') => {
+export const buildAnalysisPrompt = (fileName, customFields, context = {}, lang, script = '', audioLang = lang) => {
   const lines = [
-    `Analyze this sales call recording (${fileName}). Return the complete structured diarized transcript, sentiment graph timeline, coaching card with exactly 3 things done well and 3 missed opportunities, and the CRM custom fields. Write all descriptive text in ${lang.language}.`,
+    `Analyze this sales call recording (${fileName}). The call is expected to be in ${audioLang.language}. Return the complete structured diarized transcript, sentiment graph timeline, coaching card with exactly 3 things done well and 3 missed opportunities, and the CRM custom fields. Write all descriptive text in ${lang.language}; keep transcript text and quotes in the language actually spoken.`,
   ];
   if (context.callDate) lines.push(`Call date: ${context.callDate}.`);
   if (context.notes) lines.push(`Context from the CRM: ${context.notes}`);

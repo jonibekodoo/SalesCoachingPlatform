@@ -8,3 +8,4 @@ data
 *.log
 deploy
 README.md
+!docs

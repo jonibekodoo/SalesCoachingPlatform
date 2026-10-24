@@ -8,7 +8,7 @@ import { buildAnalysisSchema } from '../gemini/schema.js';
 import { checkAllowance, charge } from './billing.service.js';
 import { getMaxAudioSeconds, estimateAiCostUsd } from './settings.service.js';
 import { normalizeFieldDefs, mergeFieldDefs, coerceFieldValues } from './customFields.js';
-import { findCountry, DEFAULT_COUNTRY } from '../util/countries.js';
+import { findCountry, DEFAULT_COUNTRY, findLanguage } from '../util/countries.js';
 
 const PRIORITY_ORDER = { high: 0, medium: 1, low: 2 };
 const AUDIO_MIME_RE = /^(audio\/|video\/(mp4|webm|ogg|quicktime))/;
@@ -81,6 +81,34 @@ function normalizeTalkRatio(cs) {
   if (cs.speakerB && !(Number(cs.speakerB.talkTimePercent) > 0)) cs.speakerB.talkTimePercent = cs.talkRatio.speakerB;
 }
 
+/** Short rating view for lists and the top level of the API response */
+function ratingSummary(row) {
+  if (row.rating_score === null || row.rating_score === undefined) return null;
+  const score = Number(row.rating_score);
+  return { scale: 10, score, basis: row.script_score !== null && row.script_score !== undefined ? 'script' : 'general', label: ratingLabel(score) };
+}
+
+const ratingLabel = (s) => (s >= 9 ? 'excellent' : s >= 7 ? 'good' : s >= 5 ? 'average' : s >= 3 ? 'weak' : 'poor');
+
+/** Clamps criteria, recomputes the overall score as a weighted mean (mandatory criteria ×2) */
+function normalizeRating(parsed, withScript) {
+  const r = parsed.rating && typeof parsed.rating === 'object' ? parsed.rating : { score: 0, verdict: '', criteria: [] };
+  const criteria = (Array.isArray(r.criteria) ? r.criteria : []).map((c) => ({
+    name: String(c.name || ''),
+    score: Math.max(0, Math.min(10, Number(c.score) || 0)),
+    required: !!c.required,
+    comment: String(c.comment || ''),
+  }));
+  let score = Math.max(0, Math.min(10, Number(r.score) || 0));
+  if (criteria.length) {
+    const wsum = criteria.reduce((a, c) => a + (c.required ? 2 : 1), 0);
+    score = criteria.reduce((a, c) => a + c.score * (c.required ? 2 : 1), 0) / wsum;
+  }
+  score = Math.round(score * 10) / 10;
+  parsed.rating = { scale: 10, score, basis: withScript ? 'script' : 'general', label: ratingLabel(score), verdict: String(r.verdict || ''), criteria };
+  return score;
+}
+
 export const rowToApi = (row, { full = true } = {}) => {
   const base = {
     id: row.id,
@@ -97,6 +125,7 @@ export const rowToApi = (row, { full = true } = {}) => {
     model: row.model || null,
     processingMs: row.processing_ms,
     scriptScore: row.script_score ?? null,
+    rating: ratingSummary(row),
     ai: {
       inputTokens: row.input_tokens || 0,
       outputTokens: row.output_tokens || 0,
@@ -131,6 +160,7 @@ const safeJson = (s, fallback) => {
  * @param {object} [p.context] - { callDate, notes }
  * @param {string} [p.script] - sales script for this call (defaults to the company script)
  * @param {string} [p.source] - 'api' | 'admin'
+ * @param {string} [p.outputLanguage] - language code for the result texts (defaults to the company setting, then the country language)
  */
 export async function analyzeForCompany(p) {
   const startedAt = Date.now();
@@ -157,7 +187,12 @@ export async function analyzeForCompany(p) {
 
   const script = String(p.script ?? company.script ?? '').trim().slice(0, 20000);
   const schema = buildAnalysisSchema(fieldDefs, { withScript: !!script });
-  const lang = { language: country.language, note: country.note };
+  const audioLang = { language: country.language, note: country.note };
+  const outCode = String(p.outputLanguage || company.output_language || '').trim();
+  const outLangDef = outCode ? findLanguage(outCode) : null;
+  if (outCode && !outLangDef) throw new HttpError(400, `outputLanguage qoʻllanmaydi: ${outCode}`, { code: 'INVALID_LANGUAGE' });
+  const lang = outLangDef ? { language: outLangDef.language, note: outLangDef.note } : audioLang;
+  const outputLanguageCode = outLangDef ? outLangDef.code : country.languageCode;
   let parsed;
   let model = '';
   let usage = { inputTokens: 0, outputTokens: 0, thoughtTokens: 0 };
@@ -166,11 +201,11 @@ export async function analyzeForCompany(p) {
       contents: {
         parts: [
           { inlineData: { mimeType, data: buffer.toString('base64') } },
-          { text: buildAnalysisPrompt(fileName || 'sales_call.audio', fieldDefs, context, lang, script) },
+          { text: buildAnalysisPrompt(fileName || 'sales_call.audio', fieldDefs, context, lang, script, audioLang) },
         ],
       },
       config: {
-        systemInstruction: buildSystemInstruction(lang),
+        systemInstruction: buildSystemInstruction(lang, audioLang),
         responseMimeType: 'application/json',
         responseSchema: schema,
       },
@@ -197,7 +232,14 @@ export async function analyzeForCompany(p) {
   normalizeTalkRatio(parsed.callSummary);
   const customValues = coerceFieldValues(fieldDefs, parsed.customFields);
   parsed.customFields = customValues;
-  parsed.language = { country: country.code, language: country.language, code: country.languageCode };
+  parsed.language = {
+    country: country.code,
+    // language of the call (from the country) and language of the result texts
+    language: country.language,
+    code: country.languageCode,
+    outputLanguage: lang.language,
+    outputCode: outputLanguageCode,
+  };
   let scriptScore = null;
   if (script && parsed.scriptAdherence) {
     const sa = parsed.scriptAdherence;
@@ -209,6 +251,7 @@ export async function analyzeForCompany(p) {
     delete parsed.scriptAdherence;
   }
   parsed.source = p.source || 'api';
+  const ratingScore = normalizeRating(parsed, !!(script && parsed.scriptAdherence));
 
   const durationSeconds = probed ?? Number(parsed.callSummary?.durationSeconds) ?? 60;
   // The real duration decides the bill; re-check the limit when the header gave no duration
@@ -220,8 +263,8 @@ export async function analyzeForCompany(p) {
     q.run(
       `INSERT INTO analyses(id, company_id, token_id, subscription_id, external_id, file_name, mime_type, file_bytes, duration_seconds, billed_seconds, cost, billing_type,
          status, error, model, processing_ms, title, overall_score, overall_grade, custom_fields, result, created_at,
-         input_tokens, output_tokens, thought_tokens, ai_cost_usd, script_score)
-       VALUES(?,?,?,?,?,?,?,?,?,?,?,?,'done',NULL,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+         input_tokens, output_tokens, thought_tokens, ai_cost_usd, script_score, rating_score)
+       VALUES(?,?,?,?,?,?,?,?,?,?,?,?,'done',NULL,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       id,
       company.id,
       token?.id || null,
@@ -246,7 +289,8 @@ export async function analyzeForCompany(p) {
       usage.outputTokens,
       usage.thoughtTokens,
       estimateAiCostUsd(usage),
-      scriptScore
+      scriptScore,
+      ratingScore
     );
     charge({ company, subscription: finalAllowance.subscription, billedSeconds: finalAllowance.billedSeconds, cost: finalAllowance.cost, analysisId: id });
   });

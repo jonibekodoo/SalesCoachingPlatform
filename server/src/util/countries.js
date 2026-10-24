@@ -29,6 +29,23 @@ export const COUNTRIES = [
 
 export const DEFAULT_COUNTRY = 'UZ';
 
+// Output languages the results can be written in (independent of the call language)
+const EXTRA_LANGUAGES = [
+  { languageCode: 'uz-Cyrl', language: 'Uzbek (Cyrillic script)', name: 'Oʻzbek (kirill)', note: 'Cyrillic script' },
+];
+
+export const LANGUAGES = (() => {
+  const seen = new Map();
+  for (const c of COUNTRIES) {
+    if (!seen.has(c.languageCode)) seen.set(c.languageCode, { code: c.languageCode, language: c.language, note: c.note, name: c.language });
+  }
+  for (const l of EXTRA_LANGUAGES) seen.set(l.languageCode, { code: l.languageCode, language: l.language, note: l.note, name: l.name });
+  return [...seen.values()];
+})();
+
+export const findLanguage = (code) => LANGUAGES.find((l) => l.code === String(code || ''));
+export const isValidLanguage = (code) => !!findLanguage(code);
+
 export const findCountry = (code) => COUNTRIES.find((c) => c.code === String(code || '').toUpperCase());
 
 export const isValidCountry = (code) => !!findCountry(code);

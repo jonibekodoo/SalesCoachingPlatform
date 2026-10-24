@@ -2,14 +2,14 @@ import { Router } from 'express';
 import { publicSettings, setSetting } from '../../services/settings.service.js';
 import { testGemini } from '../../gemini/client.js';
 import { asyncHandler, HttpError } from '../../middleware/errors.js';
-import { COUNTRIES } from '../../util/countries.js';
+import { COUNTRIES, LANGUAGES } from '../../util/countries.js';
 import { FIELD_TYPES } from '../../services/customFields.js';
 
 const router = Router();
 
 router.get('/', (_req, res) => res.json(publicSettings()));
 
-router.get('/meta', (_req, res) => res.json({ countries: COUNTRIES, fieldTypes: FIELD_TYPES }));
+router.get('/meta', (_req, res) => res.json({ countries: COUNTRIES, languages: LANGUAGES, fieldTypes: FIELD_TYPES }));
 
 router.put('/', (req, res) => {
   const b = req.body || {};

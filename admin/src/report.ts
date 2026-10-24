@@ -1,4 +1,4 @@
-import type { AnalysisFull, AnalysisResult, CoachingTask, ScriptAdherence } from './types';
+import type { AnalysisFull, AnalysisResult, CoachingTask, Rating, ScriptAdherence } from './types';
 
 // Builds a self-contained HTML report of one analysis (inline CSS, no external assets),
 // so it can be saved, emailed or printed from any browser.
@@ -89,6 +89,28 @@ const taskCard = (t: CoachingTask, i: number) => `
     ${t.why ? `<p class="task-why"><b>Nima uchun:</b> ${esc(t.why)}</p>` : ''}
     ${t.successCriteria ? `<p class="task-ok"><b>Bajarildi deb hisoblanadi:</b> ${esc(t.successCriteria)}</p>` : ''}
   </div>`;
+
+const RATING_LABELS: Record<string, string> = { excellent: 'Aʼlo', good: 'Yaxshi', average: 'Oʻrtacha', weak: 'Zaif', poor: 'Yomon' };
+const ratingColor = (s: number) => (s >= 9 ? '#059669' : s >= 7 ? '#0284c7' : s >= 5 ? '#d97706' : '#e11d48');
+
+const ratingSection = (rating?: Rating) => {
+  if (!rating) return '';
+  return `
+  <section>
+    <h2>Baho: <span style="color:${ratingColor(rating.score)}">${rating.score.toFixed(1)} / 10</span> <span class="tag" style="background:#eef2ff;color:#3730a3">${esc(RATING_LABELS[rating.label] || rating.label)}</span>
+      <span class="sub" style="font-weight:400">· ${rating.basis === 'script' ? 'sotuv skripti boʻyicha' : 'umumiy mezonlar boʻyicha'}</span></h2>
+    ${rating.verdict ? `<p>${esc(rating.verdict)}</p>` : ''}
+    <table><thead><tr><th>Mezon</th><th>Baho</th><th>Izoh</th></tr></thead><tbody>
+      ${rating.criteria
+        .map(
+          (c) => `<tr><td><b>${esc(c.name)}</b>${c.required ? ' <span class="chip prio-high">majburiy</span>' : ''}</td>
+            <td style="white-space:nowrap;color:${ratingColor(c.score)};font-weight:700">${c.score % 1 === 0 ? c.score : c.score.toFixed(1)} / 10</td>
+            <td>${esc(c.comment)}</td></tr>`
+        )
+        .join('')}
+    </tbody></table>
+  </section>`;
+};
 
 const customFieldsSection = (fields: Record<string, unknown>) => {
   const entries = Object.entries(fields || {});
@@ -233,7 +255,7 @@ export function buildReportHtml(a: AnalysisFull): string {
       <h1>${esc(title)}</h1>
       <div class="meta">${esc(s.speakerA.name)} (${esc(s.speakerA.role)}) ↔ ${esc(s.speakerB.name)} (${esc(s.speakerB.role)}) · ${esc(s.duration)} · ${esc(generated)}${a.fileName ? ` · ${esc(a.fileName)}` : ''}${a.externalId ? ` · CRM: ${esc(a.externalId)}` : ''}</div>
     </div>
-    <div class="grade"><small>Baho</small><b>${esc(c.overallGrade || '—')}</b></div>
+    <div class="grade"><small>${r.rating ? 'Baho / 10' : 'Baho'}</small><b>${r.rating ? r.rating.score.toFixed(1) : esc(c.overallGrade || '—')}</b>${r.rating ? `<small>${esc(RATING_LABELS[r.rating.label] || '')}</small>` : ''}</div>
   </div>
 
   <div class="kpis">
@@ -254,6 +276,7 @@ export function buildReportHtml(a: AnalysisFull): string {
     ${c.summaryAdvice ? `<div class="note advice" style="margin-top:12px"><b>Kouching xulosasi</b>${esc(c.summaryAdvice)}</div>` : ''}
   </section>
 
+  ${ratingSection(r.rating)}
   ${customFieldsSection(a.customFields || r.customFields || {})}
   ${scriptSection(r.scriptAdherence)}
 

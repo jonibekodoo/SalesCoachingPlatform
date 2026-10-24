@@ -3,10 +3,10 @@ import { Link } from 'react-router-dom';
 import { Search } from 'lucide-react';
 import { api } from '../api';
 import type { AnalysisSummary, CompanyListItem } from '../types';
-import { Badge, Card, Empty, ErrorBox, PageHeader, Select, Spinner, StatusBadge, Table, Td, fmtDate, fmtDuration, fmtMoney } from '../components/ui';
+import { Badge, Card, Empty, ErrorBox, PageHeader, RatingBadge, Select, Spinner, StatusBadge, Table, Td, fmtDate, fmtDuration, fmtMoney } from '../components/ui';
 
-export const AnalysisTable: React.FC<{ items: AnalysisSummary[]; showCompany?: boolean }> = ({ items, showCompany }) => (
-  <Table head={[...(showCompany ? ['Kompaniya'] : []), 'Vaqt', 'Nomi / fayl', 'CRM ID', 'Davomiylik', 'Hisob', 'Ball', 'Skript', 'Holat']}>
+export const AnalysisTable: React.FC<{ items: AnalysisSummary[]; showCompany?: boolean; linkBase?: string }> = ({ items, showCompany, linkBase = '/analyses' }) => (
+  <Table head={[...(showCompany ? ['Kompaniya'] : []), 'Vaqt', 'Nomi / fayl', 'CRM ID', 'Davomiylik', 'Hisob', 'Baho (10)', 'Ball', 'Skript', 'Holat']}>
     {items.map((a) => (
       <tr key={a.id} className="hover:bg-slate-50">
         {showCompany && (
@@ -18,7 +18,7 @@ export const AnalysisTable: React.FC<{ items: AnalysisSummary[]; showCompany?: b
         )}
         <Td className="text-xs text-slate-500 whitespace-nowrap">{fmtDate(a.createdAt)}</Td>
         <Td>
-          <Link to={`/analyses/${a.id}`} className="font-semibold text-slate-900 hover:text-indigo-700 line-clamp-1">
+          <Link to={`${linkBase}/${a.id}`} className="font-semibold text-slate-900 hover:text-indigo-700 line-clamp-1">
             {a.title || a.fileName || a.id}
           </Link>
           <div className="text-[11px] text-slate-400 font-mono truncate max-w-[220px]">{a.fileName}</div>
@@ -34,6 +34,7 @@ export const AnalysisTable: React.FC<{ items: AnalysisSummary[]; showCompany?: b
             '—'
           )}
         </Td>
+        <Td>{a.status === 'done' ? <RatingBadge rating={a.rating} compact /> : '—'}</Td>
         <Td>
           {a.status === 'done' ? (
             <Badge tone={(a.overallScore ?? 0) >= 75 ? 'green' : (a.overallScore ?? 0) >= 50 ? 'amber' : 'red'}>
